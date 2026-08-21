@@ -35,6 +35,8 @@ SOPS IntelliJ plugin allows you to decrypt and encrypt files encrypted with SOPS
 - Show VCS change markers for the decrypted content in the gutter of the editor.
 - Compare the decrypted contents of SOPS files in the comparison window, switching between the
   decrypted and the encrypted contents from its toolbar.
+- Resolve merge conflicts in SOPS files in their decrypted contents, encrypting the merged contents
+  back into the file when the merge is applied.
 
 ## Demo
 

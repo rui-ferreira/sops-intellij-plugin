@@ -2,6 +2,7 @@ package com.github.blarc.sops.intellij.plugin.diff
 
 import com.github.blarc.sops.intellij.plugin.SopsUtil.isSopsDocument
 import com.intellij.diff.DiffContentFactory
+import com.intellij.diff.contents.DiffContent
 import com.intellij.diff.contents.DocumentContent
 import com.intellij.diff.requests.ContentDiffRequest
 import com.intellij.diff.requests.DiffRequest
@@ -12,7 +13,7 @@ import com.intellij.openapi.project.Project
 import java.util.Collections
 
 /**
- * The decrypted contents of the documents that are being compared.
+ * The decrypted contents of the documents that are being compared or merged.
  *
  * Decrypting runs SOPS, so the result is remembered. A comparison window asks for it more than once:
  * when the window is created, when it is reloaded after the decryption has finished and whenever the
@@ -34,22 +35,31 @@ object SopsDiffContents {
     )
 
     /**
-     * The contents of [request] that are encrypted with SOPS. Only documents can be looked at, so a
-     * content of another kind, a directory for example, is never considered encrypted.
+     * The [contents] that are encrypted with SOPS. Only documents can be looked at, so a content of
+     * another kind, a directory for example, is never considered encrypted.
      */
+    fun encryptedContents(contents: List<DiffContent>): List<DocumentContent> =
+        contents.filterIsInstance<DocumentContent>().filter { isSopsDocument(it.document) }
+
+    /** The contents of [request] that are encrypted with SOPS. */
     fun encryptedContents(request: DiffRequest): List<DocumentContent> {
         if (request !is ContentDiffRequest) return emptyList()
-        return request.contents.filterIsInstance<DocumentContent>().filter { isSopsDocument(it.document) }
+        return encryptedContents(request.contents)
     }
 
-    /** Every content of [request] that is encrypted with SOPS has been decrypted. */
-    fun isDecrypted(request: DiffRequest) = encryptedContents(request).all { isDecrypted(it.encryptedText()) }
+    /** Every one of the [contents] that is encrypted with SOPS has been decrypted. */
+    fun areDecrypted(contents: List<DiffContent>) =
+        encryptedContents(contents).all { isDecrypted(it.encryptedText()) }
 
     fun isDecrypted(encryptedText: String) = decryptedContents.containsKey(encryptedText)
 
     fun remember(encryptedText: String, decryptedText: String) {
         decryptedContents[encryptedText] = decryptedText
     }
+
+    /** The decrypted content of [content], as far as it is known and [content] is a document at all. */
+    fun decryptedText(content: DiffContent): String? =
+        (content as? DocumentContent)?.let { decryptedContents[it.encryptedText()] }
 
     /**
      * The [request] with every content that is encrypted with SOPS replaced by its decrypted content.
@@ -59,8 +69,7 @@ object SopsDiffContents {
     fun decryptedRequest(project: Project, request: ContentDiffRequest): SimpleDiffRequest {
         val contentFactory = DiffContentFactory.getInstance()
         val contents = request.contents.map { content ->
-            val decryptedText = (content as? DocumentContent)?.let { decryptedContents[it.encryptedText()] }
-                ?: return@map content
+            val decryptedText = decryptedText(content) ?: return@map content
             contentFactory.create(project, decryptedText, content.contentType)
         }
 
@@ -76,5 +85,5 @@ object SopsDiffContents {
         return decryptedRequest
     }
 
-    private fun DocumentContent.encryptedText(): String = runReadAction { document.text }
+    fun DocumentContent.encryptedText(): String = runReadAction { document.text }
 }

@@ -85,6 +85,55 @@ object SopsWrapper {
         )
     }
 
+    /**
+     * Encrypts [text] the way [templateEncryptedText] is encrypted, by letting SOPS edit a copy of the
+     * template. SOPS reuses the keys and the data key of the file it edits, so the result can be
+     * decrypted by everyone who can decrypt the template and the creation rules of `.sops.yaml` do not
+     * have to match the temporary file the template is copied to.
+     *
+     * SOPS determines the store from the file extension, so [fileName] should be the name of the file
+     * the template comes from, when it is known.
+     */
+    suspend fun encrypt(
+        text: String,
+        templateEncryptedText: String,
+        project: Project,
+        fileName: String? = null,
+        onSuccess: suspend (String) -> Unit,
+        onError: suspend (String) -> Unit = {}
+    ) {
+        val directory = withContext(Dispatchers.IO) { Files.createTempDirectory("sopsIntellijPluginEncrypt") }
+        try {
+            val filePath = directory.resolve(fileName?.takeIf { it.isNotBlank() } ?: "sopsIntellijPlugin.yaml")
+            withContext(Dispatchers.IO) { Files.writeString(filePath, templateEncryptedText) }
+
+            val file = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(filePath.toFile())
+            if (file == null) {
+                onError("Could not create a temporary file to encrypt the contents with")
+                return
+            }
+
+            var errorMessage: String? = null
+            edit(file, project, text, onError = { message, exitCode ->
+                // Ignore "File has not changed", which means that the template already holds the text
+                // https://github.com/getsops/sops/blob/main/cmd/sops/codes/codes.go#L29
+                if (exitCode != 200) {
+                    errorMessage = message
+                }
+            })
+
+            val message = errorMessage
+            if (message != null) {
+                onError(message)
+                return
+            }
+
+            onSuccess(withContext(Dispatchers.IO) { Files.readString(filePath) })
+        } finally {
+            withContext(Dispatchers.IO) { FileUtils.deleteQuietly(directory.toFile()) }
+        }
+    }
+
     suspend fun edit(
         file: VirtualFile,
         project: Project,

@@ -8,7 +8,9 @@
   decrypted content of the last commit.
 - Compare the decrypted contents of the files that are being compared, switching between the decrypted
   and the encrypted contents from the toolbar of the comparison window. The setting `Decrypt contents
-  in the comparison window` decides which of the two a window starts with.
+  in the comparison and merge windows` decides which of the two a window starts with.
+- Resolve merge conflicts in the decrypted contents of the files that are being merged, encrypting the
+  merged contents back into the file when the merge is applied.
 
 ### Fixed
 

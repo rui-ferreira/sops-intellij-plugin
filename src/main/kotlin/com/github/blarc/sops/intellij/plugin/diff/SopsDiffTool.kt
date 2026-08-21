@@ -79,7 +79,7 @@ abstract class SopsDiffTool(private val delegate: FrameDiffTool) : FrameDiffTool
             return SopsDiffViewer(delegate.createComponent(context, request), context)
         }
 
-        if (!SopsDiffContents.isDecrypted(request)) {
+        if (!SopsDiffContents.areDecrypted(request.contents)) {
             return SopsDecryptingDiffViewer(project, context, request)
         }
 
@@ -113,7 +113,7 @@ private class SopsDecryptingDiffViewer(
 
     override fun init(): FrameDiffTool.ToolbarComponents {
         context.showProgressBar(true)
-        project.service<SopsService>().decryptDiffContents(request) { isDecrypted ->
+        project.service<SopsService>().decryptContents(request.contents) { isDecrypted ->
             withContext(Dispatchers.EDT) {
                 if (isDisposed) return@withContext
                 context.showProgressBar(false)

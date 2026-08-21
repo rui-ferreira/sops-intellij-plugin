@@ -1,4 +1,5 @@
 import org.jetbrains.changelog.Changelog
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask.FailureLevel
 
 fun properties(key: String) = project.findProperty(key).toString()
 
@@ -84,6 +85,19 @@ intellijPlatform {
     }
 
     pluginVerification {
+        // Showing the decrypted contents in the merge window means taking the place of the merge
+        // window of the platform, which is only possible with the internal API of that window: there
+        // is no other way to reopen a merge window or to show its contents with the viewer the
+        // platform would have shown them with. Everything else is still failed on.
+        failureLevel = listOf(
+            FailureLevel.COMPATIBILITY_PROBLEMS,
+            FailureLevel.NON_EXTENDABLE_API_USAGES,
+            FailureLevel.OVERRIDE_ONLY_API_USAGES,
+            FailureLevel.PLUGIN_STRUCTURE_WARNINGS,
+            FailureLevel.MISSING_DEPENDENCIES,
+            FailureLevel.INVALID_PLUGIN,
+            FailureLevel.NOT_DYNAMIC,
+        )
         ides {
             recommended()
         }

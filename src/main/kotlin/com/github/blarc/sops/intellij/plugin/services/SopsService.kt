@@ -8,7 +8,7 @@ import com.github.blarc.sops.intellij.plugin.getLastCommitContent
 import com.github.blarc.sops.intellij.plugin.notifications.Notification
 import com.github.blarc.sops.intellij.plugin.notifications.sendNotification
 import com.github.blarc.sops.intellij.plugin.settings.AppSettings
-import com.intellij.diff.requests.ContentDiffRequest
+import com.intellij.diff.contents.DiffContent
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.application.runWriteAction
@@ -77,13 +77,13 @@ class SopsService(
     }
 
     /**
-     * Decrypts the contents of [request] that are encrypted with SOPS, remembering them in
-     * [SopsDiffContents], and then runs [onFinished] with whether all of them could be decrypted.
+     * Decrypts the [contents] that are encrypted with SOPS, remembering them in [SopsDiffContents],
+     * and then runs [onFinished] with whether all of them could be decrypted.
      */
-    fun decryptDiffContents(request: ContentDiffRequest, onFinished: suspend (success: Boolean) -> Unit = {}) {
+    fun decryptContents(contents: List<DiffContent>, onFinished: suspend (success: Boolean) -> Unit = {}) {
         cs.launch {
             withBackgroundProgress(project, message("background.decrypting")) {
-                for (content in SopsDiffContents.encryptedContents(request)) {
+                for (content in SopsDiffContents.encryptedContents(contents)) {
                     val encryptedText = readAction { content.document.text }
                     if (SopsDiffContents.isDecrypted(encryptedText)) {
                         continue
@@ -119,6 +119,41 @@ class SopsService(
                 onFinished(true)
             }
         }
+    }
+
+    /**
+     * Encrypts [decryptedText] the way [templateEncryptedText] is encrypted and returns the result, or
+     * null when SOPS could not do it, which the user is told about.
+     */
+    suspend fun encryptLikeTemplate(
+        decryptedText: String,
+        templateEncryptedText: String,
+        fileName: String?
+    ): String? {
+        var encryptedText: String? = null
+        var errorMessage: String? = null
+        SopsWrapper.encrypt(
+            text = decryptedText,
+            templateEncryptedText = templateEncryptedText,
+            project = project,
+            // SOPS picks the store from the file extension, so encrypting the contents as anything
+            // else would write them in another format than the file that is being merged.
+            fileName = fileName,
+            onSuccess = { encryptedText = it },
+            onError = { errorMessage = it }
+        )
+
+        val newEncryptedText = encryptedText
+        if (newEncryptedText == null) {
+            sendNotification(
+                Notification(message = message("notification.merge.encrypt-failed", errorMessage.orEmpty())),
+                project
+            )
+            return null
+        }
+
+        AppSettings.instance.recordHit()
+        return newEncryptedText
     }
 
     fun encrypt(
